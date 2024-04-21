@@ -1,7 +1,5 @@
 import mysql.connector
-from dotenv import load_dotenv
 import os
-
 
 class DataBase:
 
@@ -23,7 +21,7 @@ class DataBase:
 
 
     def wipeDatabase(self):
-        fileName = "database.sql"
+        fileName = "../database.sql"
         print("Loading data")
         
         try:
@@ -208,55 +206,6 @@ class DataBase:
         return self.getPrompt(promptId)
 
 
-    def resetMonthlyUserCharCount(self,user_id):
-        self.connect()
-
-        cursor = self.cnx.cursor()
-        sql = """
-        UPDATE users
-        SET monthly_chars_used = 0,
-            last_char_reset = NOW()
-        WHERE user_id = %s;
-        """
-        cursor.execute(sql, (user_id,))
-        self.cnx.commit()
-        cursor.close()
-        return self.getUser(user_id)
-
-
-    def updateUserMonthlyCharCount(self, user_id, newMonthlyCharCount):
-        self.connect()
-
-        cursor = self.cnx.cursor()
-        sql = "UPDATE users SET monthly_chars_used = %s WHERE user_id = %s;"  
-        cursor.execute(sql, (newMonthlyCharCount, user_id))
-        self.cnx.commit()
-        cursor.close()
-        return
-
-
-    def updateUserTotalCharCount(self, user_id, newTotalCharCount):
-        self.connect()
-
-        cursor = self.cnx.cursor()
-        sql = "UPDATE users SET total_chars_used = %s WHERE user_id = %s;"  
-        cursor.execute(sql, (newTotalCharCount, user_id))
-        self.cnx.commit()
-        cursor.close()
-        return
-
-
-    def updateUserCreditCount(self, user_id, newUserCredit):
-        self.connect()
-
-        cursor = self.cnx.cursor()
-        sql = "UPDATE users SET char_credit = %s WHERE user_id = %s;"  
-        cursor.execute(sql, (newUserCredit, user_id))
-        self.cnx.commit()
-        cursor.close()
-        return
-
-
     def getPublicVoices(self):
         self.connect()
 
@@ -340,6 +289,7 @@ class DataBase:
             return None
         return result[0]
     
+
     def addServer(self, serverId,serverName):
         self.connect()
 
@@ -350,6 +300,7 @@ class DataBase:
         cursor.close()
         return
     
+
     def getServer(self, serverId):
         self.connect()
 
@@ -363,6 +314,7 @@ class DataBase:
             return None
         return result[0]
     
+
     def getServerByName(self, serverName):
         self.connect()
 
@@ -376,6 +328,7 @@ class DataBase:
             return None
         return result[0]
     
+
     def getServerPrompts(self, userId, serverId, limit):
         self.connect()
 
@@ -389,6 +342,7 @@ class DataBase:
             return None
         
         return result
+
 
     def hasTransactions(self, userId):
         self.connect()

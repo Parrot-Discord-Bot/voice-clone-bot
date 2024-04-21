@@ -6,3 +6,6 @@ voices/
 voices-backup/
 temp/
 message.txt
+venv/
+base_speakers/
+converter/

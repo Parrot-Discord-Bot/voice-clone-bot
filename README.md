@@ -1,4 +1,4 @@
-<img src="parrot_5_round.png" width="100"></img>
+<img src="img/parrot_5_round.png" width="100"></img>
 
 # Parrot Discord Bot
 
@@ -22,5 +22,5 @@ https://github.com/Ferdinand737/voice-clone-bot/assets/71345367/a81d5d9b-5d72-41
 
 <br>
 
-<img src="sc_1.png">
-<img src="sc_2.png">
+<img src="img/sc_1.png">
+<img src="img/sc_2.png">

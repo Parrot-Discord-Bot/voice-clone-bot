@@ -19,11 +19,6 @@ CREATE TABLE users (
     user_id BIGINT NOT NULL PRIMARY KEY,
     username VARCHAR(255) NOT NULL,
     privileges VARCHAR(255) DEFAULT 'normal_user',
-    total_chars_used INT DEFAULT 0,
-    monthly_char_limit INT DEFAULT 4000,
-    monthly_chars_used INT DEFAULT 0,
-    char_credit INT DEFAULT 0,
-    last_char_reset TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     date_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -33,7 +28,6 @@ CREATE TABLE voices (
     voice_id VARCHAR(255) NOT NULL PRIMARY KEY,
     name VARCHAR(255),
     shortcut VARCHAR(5),
-    accent VARCHAR(255),
     user_id BIGINT REFERENCES users(user_id),
     server_id BIGINT REFERENCES servers(server_id),
     path VARCHAR(255) NOT NULL,

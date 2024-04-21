@@ -25,10 +25,9 @@
 import os
 import discord
 from discord.ext import commands
-from discord.voice_client import VoiceClient
 import asyncio
 from dotenv import load_dotenv
-import openai
+from litellm import completion
 from dataManager import DataManager
 from datetime import datetime, timedelta, timezone
 import shutil
@@ -36,7 +35,6 @@ import random
 from collections import namedtuple
 import functools
 import asyncio
-import typing # For typehinting 
 
 
 load_dotenv()
@@ -46,7 +44,6 @@ intents.messages = True
 intents.message_content = True  # This is to allow the bot to see message content, especially useful after newer API changes
 bot = commands.Bot(command_prefix='!', help_command=None, intents=intents)
 bot.remove_command('help')
-openai.api_key = os.getenv('OPENAI_TOKEN')
 dataManager = DataManager()
 footer_msg = "This bot was created by abraham_jefferson"
 
@@ -91,23 +88,6 @@ def makeErrorMessage(reason):
     embed.set_footer(text=footer_msg)
     return embed
 
-
-def getUsageEmbed(user, username):
-
-    user, nextCharReset = checkCharacters(user)
-    availableMonthlyChars = 0 if user['monthly_char_limit'] - user['monthly_chars_used'] < 0 else user['monthly_char_limit'] - user['monthly_chars_used']
-
-
-    embed = discord.Embed(title=username + "'s usage", color=0x0000ff, description="First Prompt: " + str(user['date_time'].strftime('%b %-d, %Y')))
-    embed.add_field(name='Privilages',value=str(user['privileges']))
-    embed.add_field(name="Total Characters Used", value=str(user['total_chars_used']))
-    embed.add_field(name="Monthly Characters Used", value=str(user['monthly_chars_used']))
-    embed.add_field(name="Monthly Character Limit", value=str(user['monthly_char_limit']))
-    embed.add_field(name="Monthly Characters Remaining", value= str(availableMonthlyChars))
-    embed.add_field(name="Character Credit", value=user['char_credit'])
-    embed.add_field(name="Next Character Reset", value=str(nextCharReset.strftime('%b %-d, %Y')))
-    embed.set_footer(text=footer_msg)
-    return embed
 
 
 def getAboutEmbed():
@@ -243,15 +223,6 @@ def parseArgs(command):
 
 def checkUser(user):
 
-    discordAccountDate = user.created_at
-
-    now = datetime.now(timezone.utc)
-    
-    date_difference = now - discordAccountDate
-    
-    if date_difference < timedelta(days=30) and not dataManager.db.hasTransactions(user.id):
-        return None
-
     foundUser = dataManager.db.getUser(user.id)
 
     if foundUser is None:
@@ -302,22 +273,9 @@ async def playAudio(ctx, channel, source):
         print(error)
 
 
-def checkCharacters(user):
-
-    lastCharReset = user['last_char_reset']
-
-    days_difference = datetime.now() - lastCharReset
-
-    if days_difference > timedelta(days=30):
-        user = dataManager.db.resetMonthlyUserCharCount(user['user_id'])
-        lastCharReset = user['last_char_reset']
-
-    nextCharReset = lastCharReset + timedelta(days=30)
-
-    return user, nextCharReset
 
 
-async def run_blocking(blocking_func: typing.Callable, *args, **kwargs) -> typing.Any:
+async def run_blocking(blocking_func, *args, **kwargs):
     """Runs a blocking function in a non-blocking way"""
     func = functools.partial(blocking_func, *args, **kwargs) # `run_in_executor` doesn't support kwargs, `functools.partial` does
     return await bot.loop.run_in_executor(None, func)
@@ -349,7 +307,7 @@ async def help(ctx):
         return
 
 
-    commands = ['!speak','!add','!download','!replay','!voices','!delete','!usage','!buy','!about']
+    commands = ['!speak','!add','!download','!replay','!voices','!delete','!about']
 
     helpList = []
 
@@ -359,8 +317,6 @@ async def help(ctx):
     helpList.append(replayHelp)
     helpList.append(getVoicesEmbed(serverId, serverName))
     helpList.append(deleteHelp)
-    helpList.append(getUsageEmbed(user,ctx.author.display_name))
-    helpList.append(getBuyEmbed())
     helpList.append(getAboutEmbed())
    
     embed = discord.Embed(title="Help",color=0x0000ff, description="Available Commands")
@@ -427,8 +383,6 @@ async def speak(ctx):
     #channel = ctx.author.voice.channel
     channel = voice.channel
 
-    user, nextCharReset = checkCharacters(user)
-
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
    
@@ -449,9 +403,9 @@ async def speak(ctx):
 
     if args['gpt']:
         try:
-            openaiInput = args['prompt'] + " Do not cut off mid sentence."
+            ollamaPrompt = args['prompt'] + " Do not cut off mid sentence."
             print(f"Requesting response from OpenAi for prompt ({args['prompt']})...")
-            script = await run_blocking(openai.Completion.create,model="text-davinci-003",prompt=openaiInput,temperature=0.7,max_tokens=150)
+            script = await run_blocking(completion,model="ollama/dolphin-mixtral:latest",messages=[{ "content": ollamaPrompt, "role": "user"}], api_base="http://localhost:11434")
             script = script["choices"][0]["text"]
             print(f"Received response from OpenAi!")
         except:
@@ -470,14 +424,7 @@ async def speak(ctx):
     availableCharCredit = user['char_credit']
 
     availableCharTotal = availableMonthlyChars + availableCharCredit
-
-    if len(script) > availableCharTotal:
-        error = f"""This response would exceed your available characters ({availableCharTotal}).\n {user['monthly_char_limit']} characters will be added on {nextCharReset.strftime('%b %-d, %Y')}.
-        Visit https://parrotbot.me to buy more characters."""
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-    
+       
     outputPath = await run_blocking(dataManager.textToSpeech,args, clonedVoice['voice_id'], user['user_id'], serverId, script)
 
     if len(script) > availableMonthlyChars:
@@ -502,15 +449,6 @@ async def add(ctx):
         await ctx.send(embed=addHelp)
         return
 
-    if user is None:
-        error = "Your discord account is too new."
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-    
-    # if user['privileges'] == 'normal_user':
-    #     await ctx.send(embed=makeErrorMessage("Only members can add voices to their server."))
-    #     return
     
     if args['voiceName'] is None:
         await ctx.send(embed=addHelp)
@@ -717,15 +655,6 @@ async def delete(ctx):
 
     args = parseArgs(ctx.message.content)
 
-    if user is None:
-        error = "Your discord account is too new"
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-
-    # if user['privileges'] == 'normal_user':
-    #     await ctx.send(embed=makeErrorMessage("Only members can delete voices."))
-    #     return
 
     if args['public'] and user['privileges'] != 'admin':
         error = "Only admins can delete public voices"
@@ -778,46 +707,10 @@ async def delete(ctx):
     await ctx.send(embed=embed)
 
 
-@bot.command(name='usage')
-async def usage(ctx):
-    user,serverId,servername = startCommand(ctx)
-
-    if user is None:
-        error = "Your discord account is too new."
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-    await ctx.send(embed=getUsageEmbed(user,ctx.author.display_name))
-
-
 @bot.command(name='about')
 async def about(ctx):
     startCommand(ctx)
     await ctx.send(embed=getAboutEmbed())
 
-
-@bot.command(name='buy')
-async def buy(ctx):
-    startCommand(ctx)
-    await ctx.send(embed=getBuyEmbed())
-
-
-@bot.command(name='message')
-async def message(ctx):
-    user,serverId,servername = startCommand(ctx)
-
-    if user is None:
-        error = "Your discord account is too new."
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-    
-    if user['privileges'] != 'admin':
-        error = 'You are not allowed to use this command'
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-    
-    writeMessage(ctx.message.content.replace('!message','').strip())
 
 bot.run(TOKEN)
