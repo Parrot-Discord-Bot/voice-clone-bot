@@ -29,15 +29,15 @@ import asyncio
 from dotenv import load_dotenv
 from litellm import completion
 from dataManager import DataManager
-from datetime import datetime, timedelta, timezone
 import shutil
 import random
 from collections import namedtuple
 import functools
 import asyncio
+from utils import *
 
 
-load_dotenv()
+load_dotenv(ENV_FILE)
 TOKEN = os.getenv('DISCORD_TOKEN')
 intents = discord.Intents.default()
 intents.messages = True
@@ -164,7 +164,7 @@ def parseArgs(command):
     
     if currentCommand == '!add':
         
-        options = {'voiceName':None,'accent':None,'public':None}
+        options = {'voiceName':None, 'public':None}
 
         accents = ['american', 'british', 'african', 'australian','indian']
 
@@ -180,14 +180,6 @@ def parseArgs(command):
         if 'public' in arguments:
             options['public'] = 'public'
 
-        try:
-            inputAccent = arguments[2]
-            if inputAccent not in accents:
-                print(f"Invalid accent '{inputAccent}' selected.")
-            else:
-                options['accent'] = inputAccent.capitalize()
-        except:
-            print(f"Could not find accent in command '{currentCommand}'.")
 
         return options
     
@@ -348,12 +340,6 @@ async def help(ctx):
 async def speak(ctx):
     user,serverId,servername = startCommand(ctx)
 
-    if user is None:
-        error = "Your discord account is too new."
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-    
     if user['privileges'] == 'banned':
         error = 'You are not allowed to use this command'
         await ctx.send(embed=makeErrorMessage(error))
@@ -396,11 +382,6 @@ async def speak(ctx):
 
     await ctx.send("Generating audio...")
 
-    message = readMessage()
-
-    if len(message) > 0:
-        await ctx.send(readMessage())
-
     if args['gpt']:
         try:
             ollamaPrompt = args['prompt'] + " Do not cut off mid sentence."
@@ -418,23 +399,7 @@ async def speak(ctx):
 
     script = script.strip()
 
-    availableMonthlyChars = user['monthly_char_limit'] - user['monthly_chars_used']
-    availableMonthlyChars = 0 if availableMonthlyChars < 0 else availableMonthlyChars
-
-    availableCharCredit = user['char_credit']
-
-    availableCharTotal = availableMonthlyChars + availableCharCredit
-       
     outputPath = await run_blocking(dataManager.textToSpeech,args, clonedVoice['voice_id'], user['user_id'], serverId, script)
-
-    if len(script) > availableMonthlyChars:
-        dataManager.db.updateUserMonthlyCharCount(user['user_id'], user['monthly_char_limit'])
-        remainingChars = len(script) - availableMonthlyChars
-        dataManager.db.updateUserCreditCount(user['user_id'], availableCharCredit-remainingChars)
-    else:
-        dataManager.db.updateUserMonthlyCharCount(user['user_id'], user['monthly_chars_used'] + len(script))
-
-    dataManager.db.updateUserTotalCharCount(user['user_id'], user['total_chars_used'] + len(script))
 
     await playAudio(ctx, channel, outputPath)
     
@@ -463,21 +428,6 @@ async def add(ctx):
         serverId = None
 
 
-    if args['accent'] is None:
-        error = f"""Invalid accent.
-                                                Choose one of the following:\n
-                                                -American
-                                                -British
-                                                -African
-                                                -Australian
-                                                -Indian
-                                                \nTry:
-                                                !add {args['voiceName']} American"""
-        
-        await ctx.send(embed=makeErrorMessage(error))
-        print(error)
-        return
-
     files = ctx.message.attachments
 
     if len(files) == 0:
@@ -488,7 +438,7 @@ async def add(ctx):
 
     await ctx.send("Adding voice...")
 
-    tempPath = f"temp/{random.randint(0, 2**32 - 1)}"
+    tempPath = os.path.join(TEMP_DIR, str(random.randint(0, 2**32 - 1)))
 
     clonedVoice = await run_blocking(dataManager.getVoice, serverId, args['voiceName'])
 
@@ -522,7 +472,7 @@ async def add(ctx):
         file_path = os.path.join(tempPath, file.filename)
         await file.save(file_path)
 
-    newVoice = dataManager.addVoice(args['voiceName'], args['accent'], serverId, user['user_id'], tempPath)
+    newVoice = dataManager.addVoice(args['voiceName'], serverId, user['user_id'], tempPath)
 
 
     embed = discord.Embed(title="Saved!", description=f"Voice '{args['voiceName']}' saved successfully.", color=0x00ff00)

@@ -9,3 +9,4 @@ message.txt
 venv/
 base_speakers/
 converter/
+.vscode/

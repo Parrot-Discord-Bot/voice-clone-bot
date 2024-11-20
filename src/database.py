@@ -1,6 +1,6 @@
 import mysql.connector
 import os
-
+from utils import *
 class DataBase:
 
     def __init__(self):
@@ -156,15 +156,28 @@ class DataBase:
         return result[0]
     
 
-    def addVoice(self, voice_id, voiceName, shortcut, accent, serverId, user_id, path):
-        self.connect()
+    def addVoice(self, voiceName, shortcut, serverId, user_id):
+        try:
+            self.connect()
 
-        cursor = self.cnx.cursor()
-        sql = "INSERT INTO voices (voice_id, name, shortcut, accent, server_id, user_id, path) VALUES (%s,%s,%s,%s,%s,%s,%s)"
-        cursor.execute(sql,(voice_id, voiceName, shortcut, accent, serverId, user_id, path))
-        self.cnx.commit()
-        cursor.close()
-        return
+            cursor = self.cnx.cursor()
+            sql = "INSERT INTO voices (name, shortcut, server_id, user_id) VALUES (%s,%s,%s,%s)"
+            cursor.execute(sql,(voiceName, shortcut, serverId, user_id))
+
+            sql = f"UPDATE voices SET path = CONCAT('{VOICE_DIR}', '/', COALESCE(server_id, 'Public'), '/', voice_id) WHERE voice_id = LAST_INSERT_ID();"
+            cursor.execute(sql)
+
+            cursor.execute("SELECT LAST_INSERT_ID();")
+            voiceId = cursor.fetchone()[0]
+            self.cnx.commit()
+            cursor.close()
+
+            return self.getVoiceById(voiceId)
+        except mysql.connector.Error as e:
+            self.cnx.rollback()
+            cursor.close()
+            error(e.msg)
+            return None
 
 
     def getPrompt(self, prompt_id):
@@ -182,7 +195,7 @@ class DataBase:
         return result[0]
 
 
-    def addPrompt(self, args, voiceId, userId, serverId, response, numChars):
+    def addPrompt(self, args, voiceId, userId, serverId, response):
         self.connect()
 
         prompt = args['prompt']
@@ -191,12 +204,12 @@ class DataBase:
         command = command + " " + str(args['voiceName']) + " " + gpt
         cursor = self.cnx.cursor()
 
-        sql = "INSERT INTO prompts (command, voice_id, user_id, server_id, prompt, response, num_chars) VALUES (%s,%s,%s,%s,%s,%s,%s);"
-        cursor.execute(sql, (command, voiceId, userId, serverId, prompt, response, numChars))
+        sql = "INSERT INTO prompts (command, voice_id, user_id, server_id, prompt, response) VALUES (%s,%s,%s,%s,%s,%s);"
+        cursor.execute(sql, (command, voiceId, userId, serverId, prompt, response))
       
         command = command.replace(" ", "_")
       
-        sql = "UPDATE prompts SET path = CONCAT('audioOutput/', %s, '/', LAST_INSERT_ID(),'_',%s,'.mp3') WHERE prompt_id = LAST_INSERT_ID();"
+        sql = f"UPDATE prompts SET path = CONCAT('{OUTPUT_DIR}', '/', %s, '/', LAST_INSERT_ID(),'_',%s,'.mp3') WHERE prompt_id = LAST_INSERT_ID();"
         cursor.execute(sql, (userId, command))
      
         cursor.execute("SELECT LAST_INSERT_ID();")
